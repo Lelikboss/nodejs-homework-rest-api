@@ -38,7 +38,7 @@ const updateContact = async (contactId, body) => {
   const contacts = await listContacts()
   const index = contacts.findIndex((item) => item.id === contactId)
   if (index === -1) return null
-  contacts[index] = { id: contactId, ...body }
+  contacts[index] = { ...contacts[index], ...body }
   contactsListNormalization(contacts)
   return contacts[index]
 }
