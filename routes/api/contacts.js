@@ -1,14 +1,6 @@
 const express = require('express')
 const contacts = require('../../models/contacts.js')
 const router = express.Router()
-const Joi = require('joi')
-
-const createContactShema = Joi.object({
-  name: Joi.string().required(),
-  email: Joi.string()
-    .email({ minDomainSegments: 2 }).required(),
-  phone: Joi.string().regex(/^[0-9]{10}$/).messages({ 'string.pattern.base': `Phone number must have 10 digits.` }).required()
-})
 
 router.get('/', async (req, res, next) => {
   try {
@@ -38,12 +30,6 @@ router.get('/:contactId', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { error } = createContactShema.validate(req.body)
-    if (error) {
-      const errorNew = new Error(error)
-      error.status = 404
-      throw errorNew
-    }
     const newContact = await contacts.addContact(req.body);
     res.status(201).json(newContact);
   } catch (error) {
