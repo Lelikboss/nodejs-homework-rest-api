@@ -3,7 +3,6 @@ const { isValidObjectId } = require('mongoose')
 const router = express.Router()
 const validateBody = require('../../validate/contacts.js')
 const Contact = require('../../models/contact.js')
-
 router.get('/', async (req, res, next) => {
   try {
     const result = await Contact.find()
@@ -12,7 +11,6 @@ router.get('/', async (req, res, next) => {
     res.status(500).json({ message: error.message })
   }
 })
-
 router.get('/:contactId', async (req, res, next) => {
   const { contactId } = req.params;
   try {
@@ -28,7 +26,6 @@ router.get('/:contactId', async (req, res, next) => {
 
   }
 })
-
 router.post('/', async (req, res, next) => {
   try {
     const { error } = validateBody.createContactShema.validate(req.body, { abortEarly: false })
@@ -42,7 +39,6 @@ router.post('/', async (req, res, next) => {
     next(error)
   }
 })
-
 router.delete('/:contactId', async (req, res, next) => {
   const { contactId } = req.params;
   try {
@@ -56,7 +52,6 @@ router.delete('/:contactId', async (req, res, next) => {
     res.status(500).json({ message: error.message })
   }
 })
-
 router.put('/:contactId', async (req, res, next) => {
   const { contactId } = req.params;
   try {
@@ -64,7 +59,6 @@ router.put('/:contactId', async (req, res, next) => {
     if (!contact) {
       return res.status(404).json({ message: 'Not Found' });
     }
-
     const { error } = validateBody.updateContactSchema.validate(req.body, { abortEarly: false })
     if (error) {
       const errorMessage = error.details.map(detail => detail.message).join('; ')
@@ -79,7 +73,6 @@ router.put('/:contactId', async (req, res, next) => {
     return res.status(500).json({ message: error.message });
   }
 })
-
 router.patch('/:contactId/favorite', async (req, res, next) => {
   const { contactId } = req.params;
   try {
@@ -87,7 +80,6 @@ router.patch('/:contactId/favorite', async (req, res, next) => {
     if (!contact) {
       return res.status(404).json({ message: 'Not Found' });
     }
-
     const { error } = validateBody.updateContactFavoriteSchema.validate(req.body, { abortEarly: false })
     if (error) {
       const errorMessage = error.details.map(detail => detail.message).join('; ')
