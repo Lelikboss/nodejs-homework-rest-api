@@ -3,22 +3,43 @@ const { isValidObjectId } = require('mongoose')
 const router = express.Router()
 const validateBody = require('../../validate/contacts.js')
 const Contact = require('../../models/contact.js')
-router.get('/', async (req, res, next) => {
+
+const authMiddleware = require('../../middlewares/auth.js')
+
+router.get('/', authMiddleware, async (req, res, next) => {
+
   try {
-    const result = await Contact.find()
-    res.json(result)
+    const { error } = validateBody.filterAndLimitSchema.validate(req.query);
+    if (error) {
+      return res.status(400).json({ message: error.message });
+    }
+    const { page = 1, limit = 20, favorite } = req.query;
+    const filter = favorite ? { favorite: { $eq: favorite } } : {};
+    const result = await Contact.find(filter).limit(limit * 1)
+      .skip((page - 1) * limit)
+      .exec();
+    const count = await Contact.countDocuments(filter);
+    res.json({
+      result,
+      totalPages: Math.ceil(count / limit),
+      currentPage: page
+    });
   } catch (error) {
     res.status(500).json({ message: error.message })
   }
 })
-router.get('/:contactId', async (req, res, next) => {
+
+router.get('/:contactId', authMiddleware, async (req, res, next) => {
   const { contactId } = req.params;
   try {
     const result = await Contact.findById(contactId);
+    if (!result) {
+      return res.status(404).json({ message: 'Not Found' });
+    }
     res.json(result);
   } catch (error) {
     if (!isValidObjectId(contactId)) {
-      res.status(404).json({ message: 'Not Found' })
+      return res.status(404).json({ message: 'Not Found' })
     } else {
       const { status = 500, message = 'Server Error' } = error
       res.status(status).json({ message })
@@ -26,7 +47,7 @@ router.get('/:contactId', async (req, res, next) => {
 
   }
 })
-router.post('/', async (req, res, next) => {
+router.post('/', authMiddleware, async (req, res, next) => {
   try {
     const { error } = validateBody.createContactShema.validate(req.body, { abortEarly: false })
     if (error) {
@@ -39,7 +60,7 @@ router.post('/', async (req, res, next) => {
     next(error)
   }
 })
-router.delete('/:contactId', async (req, res, next) => {
+router.delete('/:contactId', authMiddleware, async (req, res, next) => {
   const { contactId } = req.params;
   try {
     await Contact.findByIdAndRemove(contactId);
@@ -47,12 +68,12 @@ router.delete('/:contactId', async (req, res, next) => {
     res.json({ message: 'Contact deleted' });
   } catch (error) {
     if (!isValidObjectId(contactId)) {
-      res.status(404).json({ message: 'Not Found' })
+      return res.status(404).json({ message: 'Not Found' })
     }
-    res.status(500).json({ message: error.message })
+    return res.status(500).json({ message: error.message })
   }
 })
-router.put('/:contactId', async (req, res, next) => {
+router.put('/:contactId', authMiddleware, async (req, res, next) => {
   const { contactId } = req.params;
   try {
     const contact = await Contact.findById(contactId);
@@ -73,7 +94,7 @@ router.put('/:contactId', async (req, res, next) => {
     return res.status(500).json({ message: error.message });
   }
 })
-router.patch('/:contactId/favorite', async (req, res, next) => {
+router.patch('/:contactId/favorite', authMiddleware, async (req, res, next) => {
   const { contactId } = req.params;
   try {
     const contact = await Contact.findById(contactId);

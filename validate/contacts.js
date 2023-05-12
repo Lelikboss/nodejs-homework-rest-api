@@ -16,4 +16,9 @@ const updateContactSchema = Joi.object({
 const updateContactFavoriteSchema = Joi.object({
     favorite: Joi.boolean()
 })
-module.exports = { createContactShema, updateContactSchema, updateContactFavoriteSchema }
+const filterAndLimitSchema = Joi.object({
+    page: Joi.number().integer().min(1),
+    limit: Joi.number().integer().min(1).max(100),
+    favorite: Joi.boolean()
+});
+module.exports = { createContactShema, updateContactSchema, updateContactFavoriteSchema, filterAndLimitSchema }
