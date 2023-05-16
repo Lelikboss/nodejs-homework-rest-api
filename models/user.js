@@ -15,7 +15,10 @@ const schema = new Schema({
         enum: ["starter", "pro", "business"],
         default: "starter"
     },
-    token: String
+    token: {
+        type: String,
+        default: null,
+    }
 })
 const User = model('user', schema)
 module.exports = User

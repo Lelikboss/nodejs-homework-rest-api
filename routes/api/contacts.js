@@ -5,18 +5,21 @@ const validateBody = require('../../validate/contacts.js')
 const Contact = require('../../models/contact.js')
 
 const authMiddleware = require('../../middlewares/auth.js')
+const ownerMiddleware = require('../../middlewares/owner.js')
 
 router.get('/', authMiddleware, async (req, res, next) => {
 
   try {
+    const { _id: owner } = req.user;
     const { error } = validateBody.filterAndLimitSchema.validate(req.query);
     if (error) {
       return res.status(400).json({ message: error.message });
     }
     const { page = 1, limit = 20, favorite } = req.query;
-    const filter = favorite ? { favorite: { $eq: favorite } } : {};
+    const filter = favorite ? { favorite, owner } : { owner };
+    const hiddenFields = { owner: 0, __v: 0 }
     const result = await Contact.find(filter).limit(limit * 1)
-      .skip((page - 1) * limit)
+      .skip((page - 1) * limit).select(hiddenFields)
       .exec();
     const count = await Contact.countDocuments(filter);
     res.json({
@@ -29,7 +32,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
   }
 })
 
-router.get('/:contactId', authMiddleware, async (req, res, next) => {
+router.get('/:contactId', authMiddleware, ownerMiddleware, async (req, res, next) => {
   const { contactId } = req.params;
   try {
     const result = await Contact.findById(contactId);
@@ -49,18 +52,22 @@ router.get('/:contactId', authMiddleware, async (req, res, next) => {
 })
 router.post('/', authMiddleware, async (req, res, next) => {
   try {
+    const { _id: owner } = req.user;
+
     const { error } = validateBody.createContactShema.validate(req.body, { abortEarly: false })
     if (error) {
       const errorMessage = error.details.map(detail => detail.message).join('; ')
       throw new Error(errorMessage)
     }
-    const newContact = await Contact.create(req.body);
+    let newContact = await Contact.create({ ...req.body, owner });
+    const hiddenFields = { owner: 0 };
+    newContact = await Contact.findById(newContact._id).select(hiddenFields);
     res.status(201).json(newContact);
   } catch (error) {
     next(error)
   }
 })
-router.delete('/:contactId', authMiddleware, async (req, res, next) => {
+router.delete('/:contactId', authMiddleware, ownerMiddleware, async (req, res, next) => {
   const { contactId } = req.params;
   try {
     await Contact.findByIdAndRemove(contactId);
@@ -73,7 +80,7 @@ router.delete('/:contactId', authMiddleware, async (req, res, next) => {
     return res.status(500).json({ message: error.message })
   }
 })
-router.put('/:contactId', authMiddleware, async (req, res, next) => {
+router.put('/:contactId', authMiddleware, ownerMiddleware, async (req, res, next) => {
   const { contactId } = req.params;
   try {
     const contact = await Contact.findById(contactId);
@@ -94,7 +101,7 @@ router.put('/:contactId', authMiddleware, async (req, res, next) => {
     return res.status(500).json({ message: error.message });
   }
 })
-router.patch('/:contactId/favorite', authMiddleware, async (req, res, next) => {
+router.patch('/:contactId/favorite', authMiddleware, ownerMiddleware, async (req, res, next) => {
   const { contactId } = req.params;
   try {
     const contact = await Contact.findById(contactId);
