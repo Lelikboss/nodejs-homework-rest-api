@@ -5,7 +5,6 @@ const validateBody = require('../../validate/contacts.js')
 const Contact = require('../../models/contact.js')
 
 const authMiddleware = require('../../middlewares/auth.js')
-const ownerMiddleware = require('../../middlewares/owner.js')
 
 router.get('/', authMiddleware, async (req, res, next) => {
 
@@ -32,14 +31,14 @@ router.get('/', authMiddleware, async (req, res, next) => {
   }
 })
 
-router.get('/:contactId', authMiddleware, ownerMiddleware, async (req, res, next) => {
+router.get('/:contactId', authMiddleware, async (req, res, next) => {
   const { contactId } = req.params;
   try {
-    const result = await Contact.findById(contactId);
-    if (!result) {
+    const contact = await Contact.findOne({ _id: contactId, owner: req.user._id }).select({ owner: 0, __v: 0 });
+    if (!contact) {
       return res.status(404).json({ message: 'Not Found' });
     }
-    res.json(result);
+    res.json(contact);
   } catch (error) {
     if (!isValidObjectId(contactId)) {
       return res.status(404).json({ message: 'Not Found' })
@@ -59,19 +58,19 @@ router.post('/', authMiddleware, async (req, res, next) => {
       const errorMessage = error.details.map(detail => detail.message).join('; ')
       throw new Error(errorMessage)
     }
-    let newContact = await Contact.create({ ...req.body, owner });
-    const hiddenFields = { owner: 0 };
-    newContact = await Contact.findById(newContact._id).select(hiddenFields);
+    const newContact = await Contact.create({ ...req.body, owner });
     res.status(201).json(newContact);
   } catch (error) {
     next(error)
   }
 })
-router.delete('/:contactId', authMiddleware, ownerMiddleware, async (req, res, next) => {
+router.delete('/:contactId', authMiddleware, async (req, res, next) => {
   const { contactId } = req.params;
   try {
-    await Contact.findByIdAndRemove(contactId);
-
+    const contact = await Contact.findOneAndRemove({ _id: contactId, owner: req.user._id });
+    if (!contact) {
+      return res.status(404).json({ message: 'Not Found' });
+    }
     res.json({ message: 'Contact deleted' });
   } catch (error) {
     if (!isValidObjectId(contactId)) {
@@ -80,19 +79,18 @@ router.delete('/:contactId', authMiddleware, ownerMiddleware, async (req, res, n
     return res.status(500).json({ message: error.message })
   }
 })
-router.put('/:contactId', authMiddleware, ownerMiddleware, async (req, res, next) => {
+router.put('/:contactId', authMiddleware, async (req, res, next) => {
   const { contactId } = req.params;
   try {
-    const contact = await Contact.findById(contactId);
-    if (!contact) {
-      return res.status(404).json({ message: 'Not Found' });
-    }
     const { error } = validateBody.updateContactSchema.validate(req.body, { abortEarly: false })
     if (error) {
       const errorMessage = error.details.map(detail => detail.message).join('; ')
       throw new Error(errorMessage)
     }
-    const updatedContact = await Contact.findOneAndUpdate({ _id: contactId }, req.body, { new: true })
+    const updatedContact = await Contact.findOneAndUpdate({ _id: contactId, owner: req.user._id }, req.body, { new: true }).select({ owner: 0, __v: 0 })
+    if (!updatedContact) {
+      return res.status(404).json({ message: 'Not Found' });
+    }
     res.status(200).json(updatedContact);
   } catch (error) {
     if (!isValidObjectId(contactId)) {
@@ -101,19 +99,18 @@ router.put('/:contactId', authMiddleware, ownerMiddleware, async (req, res, next
     return res.status(500).json({ message: error.message });
   }
 })
-router.patch('/:contactId/favorite', authMiddleware, ownerMiddleware, async (req, res, next) => {
+router.patch('/:contactId/favorite', authMiddleware, async (req, res, next) => {
   const { contactId } = req.params;
   try {
-    const contact = await Contact.findById(contactId);
-    if (!contact) {
-      return res.status(404).json({ message: 'Not Found' });
-    }
     const { error } = validateBody.updateContactFavoriteSchema.validate(req.body, { abortEarly: false })
     if (error) {
       const errorMessage = error.details.map(detail => detail.message).join('; ')
       throw new Error(errorMessage)
     }
-    const updatedContact = await Contact.findOneAndUpdate({ _id: contactId }, req.body, { new: true })
+    const updatedContact = await Contact.findOneAndUpdate({ _id: contactId, owner: req.user._id }, req.body, { new: true })
+    if (!updatedContact) {
+      return res.status(404).json({ message: 'Not Found' });
+    }
     res.status(200).json(updatedContact);
   } catch (error) {
     if (!isValidObjectId(contactId)) {
