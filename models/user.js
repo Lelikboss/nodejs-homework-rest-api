@@ -1,5 +1,4 @@
 const { Schema, model } = require("mongoose");
-
 const schema = new Schema({
     password: {
         type: String,
@@ -15,10 +14,15 @@ const schema = new Schema({
         enum: ["starter", "pro", "business"],
         default: "starter"
     },
+    avatarUrl: {
+        type: String,
+        default: '',
+    },
     token: {
         type: String,
         default: null,
     }
 })
+
 const User = model('user', schema)
 module.exports = User

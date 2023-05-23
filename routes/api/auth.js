@@ -4,9 +4,13 @@ const User = require('../../models/user')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 const authMiddleware = require('../../middlewares/auth.js')
+const uploadAva = require('../../middlewares/avatar.js')
+const gravatar = require('gravatar');
+const Jimp = require('jimp');
+const fs = require('fs/promises')
+const path = require('path')
 require('dotenv').config()
 const { JWT_SECRET } = process.env
-
 const router = express.Router()
 
 router.post('/users/register', async (req, res, next) => {
@@ -20,11 +24,18 @@ router.post('/users/register', async (req, res, next) => {
             const errorMessage = error.details.map(detail => detail.message).join('; ')
             throw new Error(errorMessage)
         }
+        const avatar = gravatar.url(req.body.email, {
+            s: '250',
+            r: 'pg',
+            d: 'retro'
+
+        }, true);
         const result = await User.create({
             email: req.body.email,
             password: hashedPassword,
+            avatarUrl: avatar
         })
-        res.status(201).json({ user: { email: result.email, subscription: result.subscription } })
+        res.status(201).json({ user: { email: result.email, subscription: result.subscription, avatarUrl: result.avatarUrl } })
     } catch (error) {
         if (error.message.includes('E11000 duplicate key error')) {
             res.status(409).json({ message: 'Email in use' })
@@ -66,7 +77,7 @@ router.post('/users/logout', authMiddleware, async (req, res) => {
 
 router.get('/users/current', authMiddleware, async (req, res, next) => {
     try {
-        const user = await User.findById(req.user._id).select('-_id email subscription');
+        const user = await User.findById(req.user._id).select('-_id email subscription avatarUrl');
         if (!user) {
             return res.status(401).json({ message: 'Not authorized' });
         }
@@ -94,5 +105,39 @@ router.patch('/user', authMiddleware, async (req, res, next) => {
     }
 })
 
+router.patch('/users/avatars', authMiddleware, uploadAva.single('avatarUrl'), async (req, res, next) => {
+    try {
+        const { filename } = req.file
+        if (!filename) {
+            return res.status(400).json({ message: 'File is not find.' });
+        }
+
+        const tmpPath = path.resolve(__dirname, '../../tmp', filename)
+        const publicPath = path.resolve(__dirname, '../../public/avatars', filename)
+
+        try {
+            await fs.rename(tmpPath, publicPath)
+        } catch (error) {
+            await fs.unlink(tmpPath)
+            throw error
+        }
+        const image = await Jimp.read(publicPath);
+
+        image.resize(250, 250);
+
+        await image.writeAsync(publicPath);
+        const user = await User.findByIdAndUpdate(
+            req.user._id,
+            { avatarUrl: `public/avatars/${filename}` },
+            { new: true }
+        )
+        if (!user) {
+            return res.status(401).json({ message: 'Not authorized' });
+        }
+        res.json({ avatarUrl: user.avatarUrl })
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+})
 
 module.exports = router
