@@ -10,9 +10,10 @@ const Jimp = require('jimp');
 const fs = require('fs/promises')
 const path = require('path')
 require('dotenv').config()
-const { JWT_SECRET } = process.env
+const { JWT_SECRET, API_KEY, SECRET_KEY, SENDER_NAME, SENDER_EMAIL } = process.env
 const router = express.Router()
-
+const mailjet = require('node-mailjet').apiConnect(API_KEY, SECRET_KEY);
+const { v4: uuidv4 } = require('uuid');
 router.post('/users/register', async (req, res, next) => {
     const { password } = req.body
     const salt = await bcrypt.genSalt()
@@ -30,12 +31,37 @@ router.post('/users/register', async (req, res, next) => {
             d: 'retro'
 
         }, true);
+        const verificationToken = uuidv4()
         const result = await User.create({
             email: req.body.email,
             password: hashedPassword,
-            avatarUrl: avatar
+            avatarUrl: avatar,
+            verifyToken: verificationToken
         })
+
+
+        await mailjet.post('send', { version: 'v3.1' }).request({
+            Messages: [
+                {
+                    From: {
+                        Email: SENDER_EMAIL,
+                        Name: SENDER_NAME
+                    },
+                    To: [
+                        {
+                            Email: result.email,
+                            Name: result.email
+                        }
+                    ],
+                    Subject: 'Email Verification',
+                    TextPart: `http://localhost:3000/api/auth/users/verify/${verificationToken}" Confirm your email`,
+                    HTMLPart:
+                        `<a href="http://localhost:3000/api/auth/users/verify/${verificationToken}">Confirm your email</a>`,
+                }
+            ]
+        });
         res.status(201).json({ user: { email: result.email, subscription: result.subscription, avatarUrl: result.avatarUrl } })
+
     } catch (error) {
         if (error.message.includes('E11000 duplicate key error')) {
             res.status(409).json({ message: 'Email in use' })
@@ -53,6 +79,10 @@ router.post('/users/login', async (req, res, next) => {
 
         if (!user || !isValidPassword) {
             res.status(401).json({ message: "Email or password is wrong" })
+        }
+        console.log(user.verify);
+        if (!user.verify) {
+            return res.status(401).json({ message: "Email not verified" })
         }
         const token = jwt.sign({ id: user._id }, JWT_SECRET)
         res.status(200).json({ token: token, user: { email: user.email, subscription: user.subscription } })
@@ -140,4 +170,74 @@ router.patch('/users/avatars', authMiddleware, uploadAva.single('avatarUrl'), as
     }
 })
 
+router.get('/users/verify/:verificationToken', async (req, res) => {
+    try {
+        const { verificationToken } = req.params
+        console.log(req.params);
+        const user = await User.findOne({ verifyToken: verificationToken })
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (user.verify) {
+            return res.status(400).json({ message: 'User have already verificated' });
+        }
+
+        await User.findByIdAndUpdate(user._id, {
+            verify: true,
+            verifyToken: null
+        })
+
+        return res.json({ message: 'Success' })
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+})
+
+router.post('/users/verify', async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ message: "Missing required field: email" });
+        }
+
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        if (user.verify) {
+            return res.status(400).json({ message: "Verification has already been passed" });
+        }
+
+        const verificationToken = uuidv4();
+        user.verifyToken = verificationToken;
+        await user.save();
+        await mailjet.post('send', { version: 'v3.1' }).request({
+            Messages: [
+                {
+                    From: {
+                        Email: SENDER_EMAIL,
+                        Name: SENDER_NAME
+                    },
+                    To: [
+                        {
+                            Email: user.email,
+                            Name: user.email
+                        }
+                    ],
+                    Subject: 'Email Verification',
+                    TextPart: `http://localhost:3000/api/auth/users/verify/${verificationToken}" Confirm your email`,
+                    HTMLPart:
+                        `<a href="http://localhost:3000/api/auth/users/verify/${verificationToken}">Confirm your email</a>`,
+                }
+            ]
+        });
+        return res.status(200).json({ message: "Verification email sent" });
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+});
 module.exports = router
